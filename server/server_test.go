@@ -113,7 +113,10 @@ func TestAuthRequired(t *testing.T) {
 
 func TestHealthz(t *testing.T) {
 	_, ts := newTestServer(t)
-	res, _ := http.Get(ts.URL + "/healthz")
+	res, err := http.Get(ts.URL + "/healthz")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer res.Body.Close()
 	if res.StatusCode != 200 {
 		t.Fatalf("healthz = %d", res.StatusCode)
