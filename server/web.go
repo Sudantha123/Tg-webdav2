@@ -14,7 +14,7 @@ import (
 	"github.com/Sudantha123/Tg-webdav2/store"
 )
 
-//go:embed static
+//go:embed all:web/static
 var staticFS embed.FS
 
 // handleWeb serves the embedded UI and the JSON API under /web/api/*.
@@ -29,7 +29,7 @@ func (s *Server) handleWeb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimPrefix(p, "/")
-	data, err := staticFS.ReadFile("static/" + name)
+	data, err := staticFS.ReadFile("web/static/" + name)
 	if err != nil {
 		s.serveIndex(w, r) // SPA fallback
 		return
@@ -39,7 +39,7 @@ func (s *Server) handleWeb(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveIndex(w http.ResponseWriter, r *http.Request) {
-	data, err := staticFS.ReadFile("static/index.html")
+	data, err := staticFS.ReadFile("web/static/index.html")
 	if err != nil {
 		http.Error(w, "ui missing", http.StatusInternalServerError)
 		return
