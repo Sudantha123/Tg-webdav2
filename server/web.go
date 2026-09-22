@@ -27,11 +27,24 @@ func (s *Server) handleWeb(w http.ResponseWriter, r *http.Request) {
 		s.handleAPI(w, r, strings.TrimPrefix(p, "/api/"))
 		return
 	}
-	name := strings.TrimPrefix(p, "/")
+
+	name := strings.TrimPrefix(path.Clean(p), "/")
 	data, err := staticFS.ReadFile("web/static/" + name)
 	if err != nil {
-		s.serveIndex(w, r) // SPA fallback
+		// Missing CSS/JS must be a real 404, not index.html. Returning HTML
+		// for an asset request can make the browser refuse the asset and
+		// leave the page apparently blank/broken.
+		http.NotFound(w, r)
 		return
+	}
+
+	switch strings.ToLower(path.Ext(name)) {
+	case ".html":
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	case ".css":
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	case ".js":
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	}
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	http.ServeContent(w, r, path.Base(name), time.Time{}, bytesReader(data))
