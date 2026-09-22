@@ -1,0 +1,9 @@
+.env
+data/
+dist/
+*.db
+*.db-wal
+*.db-shm
+session.json
+*.session
+tmp/

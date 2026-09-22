@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TG WebDAV</title>
+<link rel="stylesheet" href="/web/style.css?v=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦋</text></svg>">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand" onclick="go('/')">
+    <span class="logo">🦋</span>
+    <span class="title">TG WebDAV</span>
+    <span class="badge" id="verBadge">…</span>
+  </div>
+  <div class="searchbox">
+    <input id="search" type="search" placeholder="🔍  Search in this folder…" autocomplete="off">
+  </div>
+  <div class="actions">
+    <button class="btn ghost" onclick="refresh()" title="Refresh">⟳</button>
+    <button class="btn ghost" onclick="mkdirPrompt()" title="New folder">📁+</button>
+    <button class="btn primary" onclick="document.getElementById('fileInput').click()">⬆ Upload</button>
+    <button class="btn ghost" onclick="openSettings()" title="Settings">⚙</button>
+  </div>
+</header>
+
+<nav class="crumbs" id="crumbs"></nav>
+
+<main>
+  <div class="dropzone" id="dropzone">
+    <table class="filetable" id="fileTable">
+      <thead>
+        <tr>
+          <th class="c-icon"></th>
+          <th>Name</th>
+          <th class="c-size">Size</th>
+          <th class="c-date">Modified</th>
+          <th class="c-acts">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>
+      <div class="empty-icon">🗂️</div>
+      <div>This folder is empty</div>
+      <div class="hint">Upload files here or send them to the Telegram bot</div>
+    </div>
+  </div>
+</main>
+
+<footer class="statusbar">
+  <span id="statLeft">—</span>
+  <span id="statRight"></span>
+</footer>
+
+<input type="file" id="fileInput" multiple hidden>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="modal" id="modal" role="dialog"></div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="/web/app.js?v=1"></script>
+</body>
+</html>
