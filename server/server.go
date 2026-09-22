@@ -102,11 +102,33 @@ func (s *Server) davRoot(w http.ResponseWriter, r *http.Request) {
 // handleDav serves WebDAV methods, intercepting COPY/MOVE for instant
 // server-side copies inside telegram.
 func (s *Server) handleDav(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/dav" {
+		s.davRoot(w, r)
+		return
+	}
 	if r.Method == "COPY" {
 		if s.smartCopy(w, r) {
 			return
 		}
 	}
+
+	// The outer mux routes /dav/* here, so make the URL relative to the
+	// webdav.Handler's Prefix before handing it to x/net/webdav.
+	origPath, origRawPath := r.URL.Path, r.URL.RawPath
+	r.URL.Path = strings.TrimPrefix(origPath, "/dav")
+	if r.URL.Path == "" {
+		r.URL.Path = "/"
+	}
+	if origRawPath != "" {
+		r.URL.RawPath = strings.TrimPrefix(origRawPath, "/dav")
+		if r.URL.RawPath == "" {
+			r.URL.RawPath = r.URL.Path
+		}
+	}
+	defer func() {
+		r.URL.Path, r.URL.RawPath = origPath, origRawPath
+	}()
+
 	s.DAV.ServeHTTP(w, r)
 }
 
