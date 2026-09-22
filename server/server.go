@@ -23,7 +23,7 @@ type Server struct {
 	Cfg    *config.Config
 	St     *store.Store
 	FS     *store.FS
-	TG     *tgram.Client
+	TG     store.Telegram
 	Bot    *tgram.BotAPI
 	Log    *slog.Logger
 	DAV    webdav.Handler
