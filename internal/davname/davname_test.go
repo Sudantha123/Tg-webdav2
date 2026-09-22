@@ -10,7 +10,7 @@ func TestSanitize(t *testing.T) {
 	cases := map[string]string{
 		"my file.mp4":            "my file.mp4",
 		"bad/name\\here":         "bad_name_here",
-		"  spaced  out  ":        "spaced  out",
+		"  spaced  out  ":        "spaced out",
 		"ctrl\x00char":           "ctrlchar",
 		"colon:star*q?":          "colon_star_q_",
 		".hidden":                "hidden",
@@ -26,8 +26,12 @@ func TestSanitize(t *testing.T) {
 
 func TestSplitCaptionPath(t *testing.T) {
 	f, n, ok := SplitCaptionPath("movies/action My Film.mp4")
-	if !ok || f != "movies/action" || n != "My Film.mp4" {
+	if !ok || f != "movies" || n != "action My Film.mp4" {
 		t.Fatalf("got %q %q %v", f, n, ok)
+	}
+	f, n, ok = SplitCaptionPath("music/rock/song.mp3")
+	if !ok || f != "music/rock" || n != "song.mp3" {
+		t.Fatalf("nested got %q %q %v", f, n, ok)
 	}
 	if _, _, ok := SplitCaptionPath("nofile/"); ok {
 		t.Error("trailing slash should not split")
@@ -97,6 +101,12 @@ func TestBuild(t *testing.T) {
 	folder, name := Build("music/My Song.mp3", "", "audio/mpeg", now)
 	if folder != "music" || name != "My Song.mp3" {
 		t.Errorf("caption path: %q %q", folder, name)
+	}
+
+	// nested caption path
+	folder, name = Build("docs/2026/report final.pdf", "", "application/pdf", now)
+	if folder != "docs/2026" || name != "report final.pdf" {
+		t.Errorf("nested caption: %q %q", folder, name)
 	}
 
 	// caption with missing ext

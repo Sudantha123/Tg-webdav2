@@ -91,7 +91,7 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 		DefaultFolder: "general", WebUser: "admin", WebPass: "pass",
 		CacheMB: 4, Prefetch: 2, DeleteFromTelegram: false, LogLevel: "error",
 	}
-	s := New(cfg, st, vfs, nil, nil, slog.New(slog.DiscardHandler))
+	s := New(cfg, st, vfs, tg, nil, slog.New(slog.DiscardHandler))
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	return s, ts

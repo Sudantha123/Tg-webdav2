@@ -30,7 +30,7 @@ type Server struct {
 }
 
 // New builds the server.
-func New(cfg *config.Config, st *store.Store, vfs *store.FS, tg *tgram.Client, bot *tgram.BotAPI, log *slog.Logger) *Server {
+func New(cfg *config.Config, st *store.Store, vfs *store.FS, tg store.Telegram, bot *tgram.BotAPI, log *slog.Logger) *Server {
 	s := &Server{Cfg: cfg, St: st, FS: vfs, TG: tg, Bot: bot, Log: log}
 	s.DAV = webdav.Handler{
 		Prefix:     "/dav",

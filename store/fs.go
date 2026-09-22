@@ -118,10 +118,23 @@ func (v *FS) OpenFile(ctx context.Context, name string, flag int, perm os.FileMo
 	}
 	st, err := v.St.Stat(ctx, p)
 	if err != nil {
-		if errors.Is(err, ErrNotExist) {
-			return nil, os.ErrNotExist
+		if !errors.Is(err, ErrNotExist) {
+			return nil, err
 		}
-		return nil, err
+		// create semantics: PUT of a new file (parent must exist)
+		if flag&os.O_CREATE != 0 {
+			parent := Parent(p)
+			parentOK, perr := v.St.FolderExists(ctx, parent)
+			if perr != nil {
+				return nil, perr
+			}
+			if !parentOK {
+				return nil, os.ErrNotExist
+			}
+			entry := Entry{Name: Base(p), Path: p, Folder: parent}
+			return &writeFile{fs: v, entry: entry, ctxv: ctx}, nil
+		}
+		return nil, os.ErrNotExist
 	}
 	if flag&(os.O_WRONLY|os.O_RDWR|os.O_CREATE|os.O_TRUNC|os.O_APPEND) != 0 {
 		if st.IsDir {
