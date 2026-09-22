@@ -2,7 +2,6 @@ package server
 
 import (
 	"embed"
-	"encoding/json"
 	"io"
 	"io/fs"
 	"net/http"
