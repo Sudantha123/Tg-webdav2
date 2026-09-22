@@ -101,12 +101,12 @@ func (in *Ingester) handle(ctx context.Context, m *Message) {
 	if m.Text != "" && m.Document == nil && m.Video == nil && m.Audio == nil &&
 		m.Voice == nil && m.Sticker == nil && len(m.Photo) == 0 {
 		_ = in.Bot.SendMessage(ctx, m.Chat.ID,
-			"Send me any *file* (video / photo / audio / document) and it will be "+
-				"saved to the WebDAV storage.\n\n"+
+			"Send me any file (video / photo / audio / document) and I will save it "+
+				"to the WebDAV storage.\n\n"+
 				"• Caption = file name\n"+
-				"• Caption like `movies/My Movie.mp4` = custom folder\n"+
+				"• Caption like \"movies/My Movie.mp4\" = custom folder + name\n"+
 				"• No caption = automatic name\n\n"+
-				"Browse: /web\nWebDAV: /dav")
+				"Browse the drive on the web UI, or connect any WebDAV client.")
 		return
 	}
 
@@ -124,21 +124,28 @@ func (in *Ingester) handle(ctx context.Context, m *Message) {
 		folder = strings.TrimPrefix(def, "/")
 	}
 
-	// forward into the channel (falls back to copy)
+	// forward into the channel (flood-aware, falls back to copy)
 	var newMsg *Message
 	var err error
-	if newMsg, err = in.Bot.ForwardMessage(ctx, m.Chat.ID, in.Cfg.ChannelID, m.MessageID); err != nil {
-		var fe *FloodError
-		if errors.As(err, &fe) {
-			select {
-			case <-time.After(fe.RetryAfter):
-			case <-ctx.Done():
-				return
-			}
+	for attempt := 0; attempt < 3; attempt++ {
+		if newMsg, err = in.Bot.ForwardMessage(ctx, m.Chat.ID, in.Cfg.ChannelID, m.MessageID); err == nil {
+			break
 		}
+		var fe *FloodError
+		if !errors.As(err, &fe) {
+			break
+		}
+		log.Warn("forward flood wait", "duration", fe.RetryAfter.String())
+		select {
+		case <-time.After(fe.RetryAfter + time.Second):
+		case <-ctx.Done():
+			return
+		}
+	}
+	if err != nil {
 		if newMsg, err = in.Bot.CopyMessage(ctx, m.Chat.ID, in.Cfg.ChannelID, m.MessageID); err != nil {
 			log.Error("forward to channel failed", "err", err)
-			_ = in.Bot.SendMessage(ctx, m.Chat.ID, "❌ Failed to save: "+err.Error())
+			_ = in.Bot.SendMessage(ctx, m.Chat.ID, "Failed to save: "+err.Error())
 			return
 		}
 	}
