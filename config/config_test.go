@@ -6,14 +6,7 @@ import (
 	"testing"
 )
 
-func setEnvs(t *testing.T, kv map[string]string) {
-	t.Helper()
-	for k, v := range kv {
-		t.Setenv(k, v)
-	}
-}
-
-func baseEnv() map[string]string {
+func baseEnv(t *testing.T) map[string]string {
 	return map[string]string{
 		"BOT_TOKEN":   "123:test",
 		"API_ID":      "111",
@@ -26,7 +19,7 @@ func baseEnv() map[string]string {
 }
 
 func TestLoadValid(t *testing.T) {
-	for k, v := range baseEnv() {
+	for k, v := range baseEnv(t) {
 		t.Setenv(k, v)
 	}
 	c, err := Load()
@@ -76,7 +69,7 @@ PORT=9999
 
 func TestLoadMissingRequired(t *testing.T) {
 	t.Setenv("BOT_TOKEN", "")
-	for k, v := range baseEnv() {
+	for k, v := range baseEnv(t) {
 		t.Setenv(k, v)
 	}
 	t.Setenv("BOT_TOKEN", "")
@@ -86,7 +79,7 @@ func TestLoadMissingRequired(t *testing.T) {
 }
 
 func TestAllowedUsers(t *testing.T) {
-	for k, v := range baseEnv() {
+	for k, v := range baseEnv(t) {
 		t.Setenv(k, v)
 	}
 	t.Setenv("ALLOWED_USER_IDS", " 11, 22 ,bad,33")
@@ -100,7 +93,7 @@ func TestAllowedUsers(t *testing.T) {
 }
 
 func TestWebUsersExtra(t *testing.T) {
-	for k, v := range baseEnv() {
+	for k, v := range baseEnv(t) {
 		t.Setenv(k, v)
 	}
 	t.Setenv("WEB_USERS", "bob:p1, alice : p2")

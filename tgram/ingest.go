@@ -65,8 +65,8 @@ func (in *Ingester) Run(ctx context.Context) {
 		}
 		failures = 0
 		for _, upd := range updates {
-			if upd.UpdateID > offset {
-				offset = upd.UpdateID
+			if int64(upd.UpdateID) > offset {
+				offset = int64(upd.UpdateID)
 			}
 			if upd.Message != nil {
 				in.handle(ctx, upd.Message)

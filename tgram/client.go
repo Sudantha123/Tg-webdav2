@@ -134,78 +134,89 @@ func (c *Client) rawChannelID() int64 {
 	return id
 }
 
+// resolvedChannel holds both input forms for the storage channel.
+type resolvedChannel struct {
+	channel tg.InputChannelClass // for channels.* methods
+	peer    tg.InputPeerClass    // for messages.* methods
+}
+
 // inputChannel resolves the target channel (with access hash) for MTProto.
-func (c *Client) inputChannel(ctx context.Context) (tg.InputChannelClass, error) {
+func (c *Client) inputChannel(ctx context.Context) (resolvedChannel, error) {
 	c.peerMu.Lock()
 	defer c.peerMu.Unlock()
 	raw := c.rawChannelID()
 	if raw <= 0 {
-		return nil, fmt.Errorf("invalid CHANNEL_ID %d", c.cfg.ChannelID)
+		return resolvedChannel{}, fmt.Errorf("invalid CHANNEL_ID %d", c.cfg.ChannelID)
 	}
 
-	try := func(hash int64) (tg.InputChannelClass, *tg.Channel, error) {
+	try := func(hash int64) (*tg.Channel, error) {
 		res, err := c.API().ChannelsGetChannels(ctx, []tg.InputChannelClass{
 			&tg.InputChannel{ChannelID: raw, AccessHash: hash},
 		})
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		box, ok := res.(*tg.MessagesChats)
 		if !ok {
-			return nil, nil, fmt.Errorf("unexpected channels.getChannels response %T", res)
+			return nil, fmt.Errorf("unexpected channels.getChannels response %T", res)
 		}
 		for _, ch := range box.Chats {
 			if cc, ok := ch.(*tg.Channel); ok && cc.ID == raw {
-				return &tg.InputChannel{ChannelID: raw, AccessHash: cc.AccessHash}, cc, nil
+				return cc, nil
 			}
 		}
-		return nil, nil, fmt.Errorf("channel %d not found", raw)
+		return nil, fmt.Errorf("channel %d not found", raw)
 	}
 
-	if c.peerKnown {
-		if _, ch, err := try(c.peerHash); err == nil {
-			c.peerHash = ch.AccessHash
-			return &tg.InputChannel{ChannelID: raw, AccessHash: ch.AccessHash}, nil
+	resolve := func() (int64, error) {
+		if c.peerKnown {
+			if ch, err := try(c.peerHash); err == nil {
+				c.peerHash = ch.AccessHash
+				return ch.AccessHash, nil
+			}
 		}
+		if ch, err := try(0); err == nil {
+			c.peerHash, c.peerKnown = ch.AccessHash, true
+			return ch.AccessHash, nil
+		}
+		// fallback: scan dialogs for the channel access hash
+		res, err := c.API().MessagesGetDialogs(ctx, &tg.MessagesGetDialogsRequest{
+			Limit:      100,
+			OffsetPeer: &tg.InputPeerEmpty{},
+		})
+		if err != nil {
+			return 0, fmt.Errorf("resolve channel %d: %w", raw, err)
+		}
+		var chats []tg.ChatClass
+		switch d := res.(type) {
+		case *tg.MessagesDialogs:
+			chats = d.Chats
+		case *tg.MessagesDialogsSlice:
+			chats = d.Chats
+		}
+		for _, ch := range chats {
+			if cc, ok := ch.(*tg.Channel); ok && cc.ID == raw {
+				c.peerHash, c.peerKnown = cc.AccessHash, true
+				return cc.AccessHash, nil
+			}
+		}
+		return 0, fmt.Errorf("channel %d not found — add the bot to the channel as admin, then restart", raw)
 	}
 
-	if peer, ch, err := try(0); err == nil {
-		c.peerHash, c.peerKnown = ch.AccessHash, true
-		return peer, nil
-	}
-
-	// fallback: scan dialogs for the channel access hash
-	res, err := c.API().MessagesGetDialogs(ctx, &tg.MessagesGetDialogsRequest{
-		Limit:      100,
-		OffsetPeer: &tg.InputPeerEmpty{},
-	})
+	hash, err := resolve()
 	if err != nil {
-		return nil, fmt.Errorf("resolve channel %d: %w", raw, err)
+		return resolvedChannel{}, err
 	}
-	var chats []tg.ChatClass
-	switch d := res.(type) {
-	case *tg.MessagesDialogs:
-		chats = d.Chats
-	case *tg.MessagesDialogsSlice:
-		chats = d.Chats
-	}
-	for _, ch := range chats {
-		if cc, ok := ch.(*tg.Channel); ok && cc.ID == raw {
-			c.peerHash, c.peerKnown = cc.AccessHash, true
-			return &tg.InputChannel{ChannelID: raw, AccessHash: cc.AccessHash}, nil
-		}
-	}
-	return nil, fmt.Errorf("channel %d not found — add the bot to the channel as admin, then restart", raw)
+	return resolvedChannel{
+		channel: &tg.InputChannel{ChannelID: raw, AccessHash: hash},
+		peer:    &tg.InputPeerChannel{ChannelID: raw, AccessHash: hash},
+	}, nil
 }
 
 // ---------- messages ----------
 
 func messagesOfClass(res tg.MessagesMessagesClass) []tg.MessageClass {
 	switch m := res.(type) {
-	case *tg.Messages:
-		return m.Messages
-	case *tg.MessagesSlice:
-		return m.Messages
 	case *tg.MessagesChannelMessages:
 		return m.Messages
 	case *tg.MessagesMessages:
@@ -223,7 +234,7 @@ func (c *Client) GetMessage(ctx context.Context, msgID int64) (*tg.Message, erro
 		return nil, err
 	}
 	res, err := c.API().ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
-		Channel: peer,
+		Channel: peer.channel,
 		ID:      []tg.InputMessageClass{&tg.InputMessageID{ID: int(msgID)}},
 	})
 	if err != nil {
@@ -418,7 +429,7 @@ func (c *Client) Upload(ctx context.Context, name, mime string, r io.Reader, siz
 		mime = "application/octet-stream"
 	}
 	res, err := c.API().MessagesSendMedia(ctx, &tg.MessagesSendMediaRequest{
-		Peer:     peer,
+		Peer:     peer.peer,
 		RandomID: randInt63(),
 		Media: &tg.InputMediaUploadedDocument{
 			File:     file,
@@ -442,7 +453,7 @@ func (c *Client) Delete(ctx context.Context, msgID int64) error {
 		return err
 	}
 	_, err = c.API().ChannelsDeleteMessages(ctx, &tg.ChannelsDeleteMessagesRequest{
-		Channel: peer,
+		Channel: peer.channel,
 		ID:      []int{int(msgID)},
 	})
 	return err
@@ -455,8 +466,8 @@ func (c *Client) Copy(ctx context.Context, msgID int64) (int64, error) {
 		return 0, err
 	}
 	res, err := c.API().MessagesForwardMessages(ctx, &tg.MessagesForwardMessagesRequest{
-		FromPeer:   peer,
-		ToPeer:     peer,
+		FromPeer:   peer.peer,
+		ToPeer:     peer.peer,
 		ID:         []int{int(msgID)},
 		RandomID:   []int64{randInt63()},
 		DropAuthor: true,
