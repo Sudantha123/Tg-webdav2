@@ -1,0 +1,13 @@
+services:
+  tgwebdav:
+    build: .
+    image: tgwebdav:latest
+    container_name: tgwebdav
+    env_file: .env
+    environment:
+      - DATA_DIR=/data
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Test (linux/amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Go mod tidy
+        run: |
+          set -o pipefail
+          go mod tidy 2>&1 | tee /tmp/step.log
+
+      - name: Commit go.sum (first build only)
+        if: github.event_name == 'push' && success()
+        run: |
+          if ! git diff --quiet go.mod go.sum 2>/dev/null || git status --porcelain go.sum | grep -q .; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add go.mod go.sum
+            git commit -m "chore: generate go.sum [skip ci]"
+            git push
+          fi
+
+      - name: Vet
+        if: success()
+        run: |
+          set -o pipefail
+          go vet ./... 2>&1 | tee /tmp/step.log
+
+      - name: Test
+        if: success()
+        run: |
+          set -o pipefail
+          go test ./... -count=1 2>&1 | tee /tmp/step.log
+
+      - name: Build (linux/amd64)
+        if: success()
+        run: |
+          set -o pipefail
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -trimpath -ldflags "-s -w -X main.version=ci-${GITHUB_SHA::7}" \
+            -o dist/tgwebdav-linux-amd64 . 2>&1 | tee /tmp/step.log
+          file dist/tgwebdav-linux-amd64 || true
+
+      - name: Build (other platforms)
+        if: success()
+        run: |
+          set -o pipefail
+          {
+            CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o dist/tgwebdav-linux-arm64 .
+            CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/tgwebdav-windows-amd64.exe .
+            CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o dist/tgwebdav-darwin-arm64 .
+          } 2>&1 | tee /tmp/step.log
+
+      - name: Upload artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tgwebdav-binaries
+          path: dist/
+          retention-days: 14
+
+      # surface failing step output as check annotations (readable via API)
+      - name: Report failure log
+        if: failure()
+        run: |
+          tail -c 4000 /tmp/step.log > /tmp/report.log 2>/dev/null || true
+          split -b 800 /tmp/report.log /tmp/chunk_ 2>/dev/null || true
+          n=0
+          for f in /tmp/chunk_*; do
+            [ -f "$f" ] || continue
+            n=$((n+1)); [ $n -gt 6 ] && break
+            msg=$(sed -e 's/%/%25/g' -e 's/\r/%0D/g' -e ':a;N;$!ba;s/\n/%0A/g' "$f")
+            echo "::error title=CI log (part $n)::$msg"
+          done
+          if [ ! -s /tmp/report.log ]; then
+            echo "::error title=CI::step failed before producing output"
+          fi
